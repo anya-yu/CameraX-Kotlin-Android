@@ -3,6 +3,7 @@ package com.orbitalsonic.camraxtesting
 import android.Manifest
 import android.content.ContentValues
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
@@ -16,9 +17,15 @@ import java.util.concurrent.Executors
 import android.widget.Toast
 import androidx.camera.lifecycle.ProcessCameraProvider
 import android.util.Log
+import android.widget.TextView
 import androidx.camera.video.VideoCapture
 import androidx.core.content.PermissionChecker
 import com.orbitalsonic.camraxtesting.databinding.ActivityMainBinding
+import heartRateCalculator
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -45,15 +52,37 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Set up the listeners for video capture button
-        viewBinding.heartRateBtn.setOnClickListener { captureVideo() }
+        viewBinding.recordBtn.setOnClickListener { captureVideo() }
 
         cameraExecutor = Executors.newSingleThreadExecutor()
+
+        viewBinding.heartRateBtn.setOnClickListener {
+            val heartRateTextView: TextView = findViewById(R.id.heartRateText)
+            val videoUri = lastRecordedVideoUri
+            if (videoUri != null) {
+                heartRateTextView.text = "Calculating..."
+                CoroutineScope(Dispatchers.Main).launch {
+                    val heartRate = withContext(Dispatchers.IO) {
+                        heartRateCalculator(videoUri, contentResolver)
+                    }
+                    // Use the calculated heart rate value
+                    // For example, update the TextView
+//                    val heartRateTextView: TextView = findViewById(R.id.heartRateText)
+                    heartRateTextView.text = "Heart Rate: $heartRate"
+                }
+            } else {
+                // Handle the case when no video has been recorded yet
+                Toast.makeText(this, "No video recorded yet", Toast.LENGTH_SHORT).show()
+                heartRateTextView.text = "No video recorded yet"
+            }
+        }
     }
+    private var lastRecordedVideoUri: Uri? = null
 
     private fun captureVideo() {
         val videoCapture = this.videoCapture ?: return
 
-        viewBinding.heartRateBtn.isEnabled = false
+        viewBinding.recordBtn.isEnabled = false
 
         val curRecording = recording
         if (curRecording != null) {
@@ -99,25 +128,24 @@ class MainActivity : AppCompatActivity() {
                 .start(ContextCompat.getMainExecutor(this)) { recordEvent ->
                     when(recordEvent) {
                         is VideoRecordEvent.Start -> {
-                            viewBinding.heartRateBtn.apply {
+                            viewBinding.recordBtn.apply {
                                 text = getString(R.string.stop_capture)
                                 isEnabled = true
                             }
                         }
                         is VideoRecordEvent.Finalize -> {
-                            camera.cameraControl.enableTorch(false) // Enable flash
+                            camera.cameraControl.enableTorch(false) // Disable flash
                             if (!recordEvent.hasError()) {
-                                val msg = "Video capture succeeded: " +
-                                        "${recordEvent.outputResults.outputUri}"
+                                val msg = "Video capture succeeded: ${recordEvent.outputResults.outputUri}"
                                 Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
                                 Log.d(TAG, msg)
+                                lastRecordedVideoUri = recordEvent.outputResults.outputUri // Store the video URI
                             } else {
                                 recording?.close()
                                 recording = null
-                                Log.e(TAG, "Video capture ends with error: " +
-                                        "${recordEvent.error}")
+                                Log.e(TAG, "Video capture ends with error: ${recordEvent.error}")
                             }
-                            viewBinding.heartRateBtn.apply {
+                            viewBinding.recordBtn.apply {
                                 text = getString(R.string.start_capture)
                                 isEnabled = true
                             }

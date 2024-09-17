@@ -17,6 +17,40 @@
         app:layout_constraintTop_toTopOf="parent"
         android:layout_marginTop="20dp" />
 
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/twoBtns"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/respRateText"
+        android:layout_marginBottom="15dp">
+
+        <Button
+            android:id="@+id/recordBtn"
+            android:layout_width="100dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="10dp"
+            android:text="Record"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/heartRateBtn"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:rippleColor="@color/white" />
+
+        <Button
+            android:id="@+id/heartRateBtn"
+            android:layout_width="200dp"
+            android:layout_height="40dp"
+            android:text="Measure Heart Rate"
+            app:layout_constraintStart_toEndOf="@+id/recordBtn"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            android:layout_marginStart="10dp" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
     <TextView
         android:id="@+id/heartRateText"
         android:layout_width="350dp"
@@ -27,18 +61,7 @@
         android:textSize="16sp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toTopOf="@+id/heartRateBtn"
-        android:layout_marginBottom="2dp" />
-
-    <Button
-        android:id="@+id/heartRateBtn"
-        android:layout_width="350dp"
-        android:layout_height="40dp"
-        android:text="Measure Heart Rate"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toTopOf="@+id/respRateText"
-        android:layout_marginBottom="20dp" />
+        app:layout_constraintBottom_toTopOf="@+id/twoBtns"/>
 
     <TextView
         android:id="@+id/respRateText"
@@ -50,8 +73,7 @@
         android:textSize="16sp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintBottom_toTopOf="@+id/respRateBtn"
-        android:layout_marginBottom="2dp" />
+        app:layout_constraintBottom_toTopOf="@+id/respRateBtn"/>
 
     <Button
         android:id="@+id/respRateBtn"
