@@ -2,13 +2,18 @@ package com.orbitalsonic.camraxtesting
 
 import android.Manifest
 import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
@@ -25,15 +30,16 @@ import androidx.camera.video.VideoCapture
 import androidx.core.content.PermissionChecker
 import com.orbitalsonic.camraxtesting.databinding.ActivityMainBinding
 import heartRateCalculator
-import respiratoryRateCalculator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import respiratoryRateCalculator
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), SensorEventListener {
     // Heart Rate Variables
     private lateinit var viewBinding: ActivityMainBinding
 
@@ -44,17 +50,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cameraExecutor: ExecutorService
     private var lastRecordedVideoUri: Uri? = null
 
-    // Respiratory Rate Variables
+    // Resp Rate Variables
     private lateinit var sensorManager: SensorManager
-    private lateinit var accelerometer: Sensor
-
-    private var accelValuesX = mutableListOf<Float>()
-    private var accelValuesY = mutableListOf<Float>()
-    private var accelValuesZ = mutableListOf<Float>()
-
-    private var startTime: Long = 0
-    private val duration = 45 * 1000L // 45 seconds in milliseconds
-    private var isMeasuring = false
+    private var isRecording = false
+    private val accelValuesX = mutableListOf<Float>()
+    private val accelValuesY = mutableListOf<Float>()
+    private val accelValuesZ = mutableListOf<Float>()
+    private val scope = CoroutineScope(Dispatchers.Main)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,9 +84,7 @@ class MainActivity : AppCompatActivity() {
                         heartRateCalculator(videoUri, contentResolver)
                     }
                     // Use the calculated heart rate value
-                    // For example, update the TextView
-//                    val heartRateTextView: TextView = findViewById(R.id.heartRateText)
-                    heartRateTextView.text = "Heart Rate: $heartRate beats per minute"
+                    heartRateTextView.text = "Heart Rate: $heartRate"
                 }
             } else {
                 // Handle the case when no video has been recorded yet
@@ -94,17 +94,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Measure respiratory rate
-        // Initialize SensorManager and accelerometer sensor
-        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
-        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-
-        // Set button click listener
         viewBinding.respRateBtn.setOnClickListener {
-            if (!isMeasuring) {
-                startMeasurement()
+            if (!isRecording) {
+                startRecording()
             }
         }
-
     }
 
     private fun captureVideo() {
@@ -223,11 +217,6 @@ class MainActivity : AppCompatActivity() {
             baseContext, it) == PackageManager.PERMISSION_GRANTED
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        cameraExecutor.shutdown()
-    }
-
     override fun onRequestPermissionsResult(
         requestCode: Int, permissions: Array<String>, grantResults:
         IntArray) {
@@ -259,49 +248,66 @@ class MainActivity : AppCompatActivity() {
             }.toTypedArray()
     }
 
-    private fun startMeasurement() {
-        // Clear previous data
+    private fun startRecording() {
+        isRecording = true
         accelValuesX.clear()
         accelValuesY.clear()
         accelValuesZ.clear()
-        startTime = System.currentTimeMillis()
-        isMeasuring = true
-
-        // Hide respRateText during measurement
         val respRateTextView: TextView = findViewById(R.id.respRateText)
-        respRateTextView.text = ""
+        respRateTextView.text = "Measuring..."
+        setUpSensor()
 
-        // Register accelerometer listener
-        if (accelerometer != null) {
-            sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL)
-        } else {
-            // Handle the case where the accelerometer is not available
+        // Stop recording after a certain duration (e.g., 45 seconds)
+        scope.launch {
+            delay(45000) // Delay for 45 seconds (adjust as needed)
+            stopRecording()
         }
     }
 
-    fun onSensorChanged(event: SensorEvent?) {
-        if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER && isMeasuring) {
-            val currentTime = System.currentTimeMillis()
-            if (currentTime - startTime <= duration) {
-                // Collect accelerometer data
-                accelValuesX.add(event.values[0])
-                accelValuesY.add(event.values[1])
-                accelValuesZ.add(event.values[2])
-            } else {
-                // Time's up, stop collecting data and compute respiratory rate
-                sensorManager.unregisterListener(this)
-                isMeasuring = false
-                val respiratoryRate = respiratoryRateCalculator(accelValuesX, accelValuesY, accelValuesZ)
-
-                // Show the final result in respRateText
+    private fun stopRecording() {
+        isRecording = false
+        sensorManager.unregisterListener(this)
+        scope.launch(Dispatchers.Default) {
+            val respRate = calculateRespiratoryRate()
+            withContext(Dispatchers.Main) {
                 val respRateTextView: TextView = findViewById(R.id.respRateText)
-                respRateTextView.text = "Respiratory Rate: $respiratoryRate breaths per minute"
+                respRateTextView.text = "Respiratory Rate: $respRate"
             }
         }
     }
 
-    fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // You can leave this empty for now
+    private fun setUpSensor() {
+        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+
+        sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.also {
+            sensorManager.registerListener(
+                this,
+                it,
+                SensorManager.SENSOR_DELAY_FASTEST,
+                SensorManager.SENSOR_DELAY_FASTEST)
+        }
     }
 
+    override fun onSensorChanged(event: SensorEvent?) {
+        if(event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
+            accelValuesX.add(event.values[0])
+            accelValuesY.add(event.values[1])
+            accelValuesZ.add(event.values[2])
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        return
+    }
+
+    private fun calculateRespiratoryRate(): Int {
+        val respiratoryRate = respiratoryRateCalculator(accelValuesX,accelValuesY,accelValuesZ)
+        return respiratoryRate
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        cameraExecutor.shutdown()
+        sensorManager.unregisterListener(this)
+    }
 }
